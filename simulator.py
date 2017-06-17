@@ -315,7 +315,7 @@ class UserSimulator(ActivitySimulatorBase):
         factor, remainder = divmod(self.USER_INITIAL_POPULATION, self.MAX_CONCURRENCY)
         for _ in range(factor):
             await self._create_users(self.MAX_CONCURRENCY)
-            asyncio.sleep(2)
+            await asyncio.sleep(2)
         if remainder:
             await self._create_users(remainder)
 
