@@ -100,11 +100,9 @@ class ActivitySimulatorBase:
     LOCALE = 'en_GB'
     DATE_FORMAT = '%a, %d %b %Y %H:%M:%S'
 
-    def __init__(self, host='127.0.0.1', port=5000, options=None):
+    def __init__(self, host='127.0.0.1', port=5000):
         self.host = host
         self.port = port
-        if options:
-            self.__dict__.update(options)
         self.fake = faker.Faker(self.LOCALE)
         self.started = False
         self._client = None
@@ -208,8 +206,10 @@ class UserSimulator(ActivitySimulatorBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.user_create_url = 'http://%s:%s/users/' % (self.host, self.port)
-        self.user_endpoint_pattern = self.user_create_url + '%s'
+        self._user_resource_url = 'http://%s:%s/users/' % (self.host, self.port)
+
+    def _get_user_item_url(self, userid):
+        return self._user_resource_url + userid
 
     def start(self):
         super().start()
@@ -292,7 +292,7 @@ class UserSimulator(ActivitySimulatorBase):
         Bulk create users via async HTTP requests to the Eve server.
         """
         session = self.session
-        url = self.user_create_url
+        url = self._user_resource_url
         for _ in range(count):
             async with session.post(url, json=self._fake_user_data()) as response:
                 data = await response.json()
@@ -345,16 +345,15 @@ class UserSimulator(ActivitySimulatorBase):
         """
         while True:
             if self.USER_SET:
-                # select an existing user at random and send a PATCH request with a fake update.
-                userid, etag = random.choice(list(self.USER_SET))
-                url = self.user_endpoint_pattern % userid
-                headers = dict(self.HEADERS)
-                if etag:
-                    headers['If-Match'] = etag
                 update = self._fake_user_update()
                 # Update data is generated at random and may be empty.
-                # An empty payload is a no-op but ignore in any case.
                 if update:
+                    # select an existing user at random and send a PATCH request with a fake update.
+                    userid, etag = random.choice(list(self.USER_SET))
+                    url = self._get_user_item_url(userid)
+                    headers = dict(self.HEADERS)
+                    if etag:
+                        headers['If-Match'] = etag
                     async with self.session.patch(url, json=update, headers=headers) as response:
                         if response.status >= 400:
                             logger.error(await response.text())
@@ -378,7 +377,7 @@ class UserSimulator(ActivitySimulatorBase):
             if self.USER_SET and random.random() < self.DELETE_LIKELIHOOD:
                 # select an existing user at random and send a DELETE request
                 userid, etag = random.choice(list(self.USER_SET))
-                url = self.user_endpoint_pattern % userid
+                url = self._get_user_item_url(userid)
                 headers = dict(self.HEADERS)
                 if etag:
                     headers['If-Match'] = etag
